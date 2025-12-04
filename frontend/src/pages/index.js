@@ -1,0 +1,12 @@
+// Placeholder pages - implement full functionality based on the patterns above
+
+export { default as Products } from './Products';
+export { default as ProductDetail } from './ProductDetail';
+export { default as Cart } from './Cart';
+export { default as Checkout } from './Checkout';
+export { default as Login } from './Login';
+export { default as Register } from './Register';
+export { default as Profile } from './Profile';
+export { default as Orders } from './Orders';
+export { default as OrderDetail } from './OrderDetail';
+export { default as Compare } from './Compare';
