@@ -10,12 +10,19 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "node prisma/seed.js"
+    "prisma:seed": "node prisma/seed.js",
+    "test": "node --test tests/quantity.test.cjs",
+    "test:integration": "node --test tests/integration.test.cjs"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
   },
-  "keywords": ["ecommerce", "electronics", "react", "express"],
+  "keywords": [
+    "ecommerce",
+    "electronics",
+    "react",
+    "express"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
