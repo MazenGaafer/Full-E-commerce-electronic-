@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import API from '../services/api';
-import { Star, Filter, X, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Star, Filter, X, Search, ChevronLeft, ChevronRight, Package } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useCompareStore from '../store/compareStore';
 
@@ -125,8 +125,8 @@ const Products = () => {
         </div>
 
         {/* Search Bar */}
-        <div className="mb-6 flex gap-4">
-          <div className="flex-1 relative">
+        <div className="mb-6 flex flex-wrap sm:flex-nowrap gap-3">
+          <div className="w-full sm:w-auto sm:flex-1 min-w-0 relative">
             <input
               type="text"
               placeholder="Search products..."
@@ -137,12 +137,12 @@ const Products = () => {
             />
             <Search className="absolute right-3 top-3.5 text-gray-400" />
           </div>
-          <button onClick={applyFilters} className="btn-primary px-6">
+          <button onClick={applyFilters} className="btn-primary px-6 flex-1 sm:flex-none">
             Search
           </button>
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className="btn-outline px-6 flex items-center gap-2"
+            className="btn-outline px-6 flex-1 sm:flex-none flex items-center justify-center gap-2"
           >
             <Filter className="w-5 h-5" />
             Filters
