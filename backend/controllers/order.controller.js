@@ -1,6 +1,7 @@
 const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
+const { normalizeOrderItems } = require('../utils/quantity');
 
 // Generate unique order number
 const generateOrderNumber = () => {
@@ -22,92 +23,46 @@ const createOrder = async (req, res) => {
       notes,
     } = req.body;
 
-    if (!items || items.length === 0) {
-      return res.status(400).json({ message: 'No order items' });
+    const normalizedItems = normalizeOrderItems(items);
+    if (typeof shippingAddress !== 'string' || !shippingAddress.trim() ||
+        typeof phone !== 'string' || !phone.trim() ||
+        typeof paymentMethod !== 'string' || !paymentMethod.trim()) {
+      return res.status(400).json({ message: 'Shipping address, phone and payment method are required' });
     }
 
-    // Calculate prices
-    let itemsPrice = 0;
-    const orderItems = [];
-
-    for (const item of items) {
-      const product = await prisma.product.findUnique({
-        where: { id: item.productId },
-        include: {
-          images: {
-            where: { isPrimary: true },
-            take: 1,
-          },
-        },
-      });
-
-      if (!product) {
-        return res.status(404).json({ message: `Product ${item.productId} not found` });
-      }
-
-      if (product.stock < item.quantity) {
-        return res.status(400).json({ 
-          message: `Insufficient stock for ${product.name}` 
+    // Order, stock reservation and cart cleanup either commit together or roll back.
+    const order = await prisma.$transaction(async (tx) => {
+      let itemsPrice = 0;
+      const orderItems = [];
+      for (const item of normalizedItems) {
+        // Conditional atomic update prevents concurrent orders from overselling.
+        const reserved = await tx.product.updateMany({
+          where: { id: item.productId, stock: { gte: item.quantity } },
+          data: { stock: { decrement: item.quantity } },
         });
+        if (reserved.count !== 1) {
+          throw Object.assign(new Error('Product unavailable or insufficient stock'), { status: 400 });
+        }
+        const product = await tx.product.findUnique({
+          where: { id: item.productId },
+          include: { images: { where: { isPrimary: true }, take: 1 } },
+        });
+        const price = product.salePrice ?? product.price;
+        itemsPrice += Number(price) * item.quantity;
+        orderItems.push({ productId: product.id, name: product.name,
+          image: product.images[0]?.url || null, price, quantity: item.quantity });
       }
-
-      const price = product.salePrice || product.price;
-      itemsPrice += parseFloat(price) * item.quantity;
-
-      orderItems.push({
-        productId: product.id,
-        name: product.name,
-        image: product.images[0]?.url || null,
-        price: price,
-        quantity: item.quantity,
+      const taxPrice = Math.round(itemsPrice * 10) / 100;
+      const shippingPrice = itemsPrice > 100 ? 0 : 10;
+      const totalPrice = Math.round((itemsPrice + taxPrice + shippingPrice) * 100) / 100;
+      const created = await tx.order.create({
+        data: { orderNumber: generateOrderNumber(), userId: req.user.id,
+          items: { create: orderItems }, shippingAddress, phone, paymentMethod, notes,
+          itemsPrice, taxPrice, shippingPrice, totalPrice },
+        include: { items: { include: { product: true } } },
       });
-    }
-
-    const taxPrice = itemsPrice * 0.1; // 10% tax
-    const shippingPrice = itemsPrice > 100 ? 0 : 10; // Free shipping over $100
-    const totalPrice = itemsPrice + taxPrice + shippingPrice;
-
-    // Create order
-    const order = await prisma.order.create({
-      data: {
-        orderNumber: generateOrderNumber(),
-        userId: req.user.id,
-        items: {
-          create: orderItems,
-        },
-        shippingAddress,
-        phone,
-        paymentMethod,
-        notes,
-        itemsPrice,
-        taxPrice,
-        shippingPrice,
-        totalPrice,
-      },
-      include: {
-        items: {
-          include: {
-            product: true,
-          },
-        },
-      },
-    });
-
-    // Update product stock
-    for (const item of items) {
-      await prisma.product.update({
-        where: { id: item.productId },
-        data: {
-          stock: {
-            decrement: item.quantity,
-          },
-        },
-      });
-    }
-
-    // Clear user's cart
-    await prisma.cartItem.deleteMany({
-      where: { userId: req.user.id },
+      await tx.cartItem.deleteMany({ where: { userId: req.user.id } });
+      return created;
     });
 
     res.status(201).json({
@@ -116,7 +71,7 @@ const createOrder = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(error.status || 500).json({ message: error.status ? error.message : 'Server error' });
   }
 };
 
