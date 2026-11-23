@@ -1,6 +1,7 @@
 const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
+const { positiveInteger, productId: parseProductId } = require('../utils/quantity');
 
 // @desc    Get user's cart
 // @route   GET /api/cart
@@ -39,7 +40,7 @@ const getCart = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(error.status || 500).json({ message: error.status ? error.message : 'Server error' });
   }
 };
 
@@ -48,11 +49,12 @@ const getCart = async (req, res) => {
 // @access  Private
 const addToCart = async (req, res) => {
   try {
-    const { productId, quantity = 1 } = req.body;
+    const productId = parseProductId(req.body.productId);
+    const quantity = positiveInteger(req.body.quantity === undefined ? 1 : req.body.quantity);
 
     // Check if product exists and has stock
     const product = await prisma.product.findUnique({
-      where: { id: parseInt(productId) },
+      where: { id: parseProductId(productId) },
     });
 
     if (!product) {
@@ -68,14 +70,14 @@ const addToCart = async (req, res) => {
       where: {
         userId_productId: {
           userId: req.user.id,
-          productId: parseInt(productId),
+          productId: parseProductId(productId),
         },
       },
     });
 
     if (existingItem) {
       // Update quantity
-      const newQuantity = existingItem.quantity + parseInt(quantity);
+      const newQuantity = positiveInteger(existingItem.quantity + quantity);
 
       if (product.stock < newQuantity) {
         return res.status(400).json({ message: 'Insufficient stock' });
@@ -107,8 +109,8 @@ const addToCart = async (req, res) => {
     const cartItem = await prisma.cartItem.create({
       data: {
         userId: req.user.id,
-        productId: parseInt(productId),
-        quantity: parseInt(quantity),
+        productId: parseProductId(productId),
+        quantity: quantity,
       },
       include: {
         product: {
@@ -129,7 +131,7 @@ const addToCart = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(error.status || 500).json({ message: error.status ? error.message : 'Server error' });
   }
 };
 
@@ -139,13 +141,13 @@ const addToCart = async (req, res) => {
 const updateCartItem = async (req, res) => {
   try {
     const { productId } = req.params;
-    const { quantity } = req.body;
+    const quantity = positiveInteger(req.body.quantity);
 
     const cartItem = await prisma.cartItem.findUnique({
       where: {
         userId_productId: {
           userId: req.user.id,
-          productId: parseInt(productId),
+          productId: parseProductId(productId),
         },
       },
       include: { product: true },
@@ -155,13 +157,13 @@ const updateCartItem = async (req, res) => {
       return res.status(404).json({ message: 'Cart item not found' });
     }
 
-    if (cartItem.product.stock < parseInt(quantity)) {
+    if (cartItem.product.stock < quantity) {
       return res.status(400).json({ message: 'Insufficient stock' });
     }
 
     const updatedItem = await prisma.cartItem.update({
       where: { id: cartItem.id },
-      data: { quantity: parseInt(quantity) },
+      data: { quantity: quantity },
       include: {
         product: {
           include: {
@@ -181,7 +183,7 @@ const updateCartItem = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(error.status || 500).json({ message: error.status ? error.message : 'Server error' });
   }
 };
 
@@ -196,7 +198,7 @@ const removeFromCart = async (req, res) => {
       where: {
         userId_productId: {
           userId: req.user.id,
-          productId: parseInt(productId),
+          productId: parseProductId(productId),
         },
       },
     });
@@ -215,7 +217,7 @@ const removeFromCart = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(error.status || 500).json({ message: error.status ? error.message : 'Server error' });
   }
 };
 
@@ -234,7 +236,7 @@ const clearCart = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(error.status || 500).json({ message: error.status ? error.message : 'Server error' });
   }
 };
 
